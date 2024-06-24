@@ -29,6 +29,7 @@ static bool http_get_task_running = false;
 
 QueueHandle_t uart_queue_rx;
 QueueHandle_t uart_queue_tx;
+QueueHandle_t queue_atendimentos;
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
     static char *output_buffer;  // Buffer to store response of http request from event handler
@@ -178,7 +179,7 @@ void wifi_init() {
 
 struct elevador {
     char andar;
-    char estado;
+    char estado; //A = Aberto. F = Fechado. S = Subindo D= Descendo
     char prox;
     char btc_up[15];
     char btc_down[15];
@@ -213,7 +214,7 @@ const char *alive_msg = "alive";
 static const char *TAG = "Elevador";
 
 void zerar_rx(void) {
-    memset(tx, 0, sizeof(tx));
+    memset(rx, 0, sizeof(rx));
 }
 
 void zerar_tx(void) {
@@ -315,13 +316,13 @@ void command_processor_task(void *pvParameters) {
             }*/
            post_finished_to_firebase(rx_processor, "Rx dentro do command processor");
            
-                if (strncmp(rx_processor, "initialized", 11) == 0) {
+           //comando de inicialização
+            if (strncmp(rx_processor, "initialized", 11) == 0) {
                     post_finished_to_firebase("initialized", "Entrei em initialized");
                     vTaskDelay(pdMS_TO_TICKS(3000));
                     tx[0]='e';tx[1]='r';tx[2]='\r';
                     xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-                   
-                  
+                     post_finished_to_firebase("Enviei pra fila", "Enviar fila tx");
                     esquerdo.andar = 0;
                     esquerdo.estado = 'P';
                     esquerdo.prox = 0;
@@ -333,9 +334,112 @@ void command_processor_task(void *pvParameters) {
                     memset(esquerdo.btc_up, 0, sizeof(esquerdo.btc_up));
                     memset(esquerdo.seq_up, 0, sizeof(esquerdo.seq_up));
                     memset(esquerdo.seq_down, 0, sizeof(esquerdo.seq_down));
-                   zerar_tx();
+                    zerar_tx();
+
                 }
 
+        //porta fechada
+        if (strncmp(rx_processor, "eF", 2) == 0) {
+             esquerdo.estado = 'F';
+        }
+
+        //porta aberta
+                //porta fechada
+        if (strncmp(rx_processor, "eA", 2) == 0) {
+             esquerdo.estado = 'A';
+        }
+
+        //atendimentos solicitados dentro do elevador
+        if (strncmp(rx_processor, "eI", 2) == 0) {
+            char command_temp[30];
+            char caracter_andar_destino = 'z';
+            char destino_char[2]; // Buffer para armazenar o caractere recebido como string
+
+            caracter_andar_destino = rx_processor[2];
+            snprintf(destino_char, sizeof(destino_char), "%c", caracter_andar_destino);
+            post_finished_to_firebase(destino_char, "caracter destino");
+            
+            //Processa e manda para fila de atendimentos
+            int new_request = -1;
+
+            switch(caracter_andar_destino){
+                case 'a':
+                new_request = 0;
+                break;
+                
+                case 'b':
+                new_request = 1;
+                break; 
+
+                case 'c':
+                new_request = 2;
+                break;  
+
+                case 'd':
+                new_request = 3;
+                break;  
+
+                case 'e':
+                new_request = 4;
+                break;  
+
+                case 'f':
+                new_request = 5;
+                break;  
+
+                case 'g':
+                new_request = 6;
+                break;  
+
+                case 'h':
+                new_request = 7;
+                break;  
+
+                case 'i':
+                new_request = 8;
+                break;  
+
+                case 'j':
+                new_request = 9;
+                break;  
+
+                case 'k':
+                new_request = 10;
+                break;  
+
+                case 'l':
+                new_request = 11;
+                break;  
+
+                case 'm':
+                new_request = 12;
+                break;  
+
+                case 'n':
+                new_request = 13;
+                break;  
+
+                case 'o':
+                new_request = 14;
+                break;  
+
+                case 'p':
+                new_request = 15;
+                break;                
+            }
+        if(new_request!= -1){
+            if(esquerdo.estado == 'A'){
+                //manda fechar a porta
+                tx[0]='e';tx[1]='f';tx[2]='\r';
+                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                zerar_tx();
+            }
+
+            xQueueSend(queue_atendimentos, &new_request, portMAX_DELAY);
+            post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
+        }
+        }
+        memset(rx_processor, 0, sizeof(rx_processor));
               
             
         }
@@ -350,6 +454,27 @@ void uart_tx_task(void *pvParameters) {
        if (xQueueReceive(uart_queue_tx, &tx_task, portMAX_DELAY)) {
             uart_write_bytes(UART_NUM_0, tx_task, strlen(tx_task));
             post_finished_to_firebase(tx_task, "Escrevi UART");
+            memset(tx_task, 0, sizeof(tx_task));
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+}
+//Atendimentos são os andares.
+
+void atendimentos_task(void *pvParameters) {
+    int atendimento_task;
+
+    while (1) {
+
+       if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
+          post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
+            while(esquerdo.estado=='A'){
+                     vTaskDelay(pdMS_TO_TICKS(10)); //Aguardo alterar estado para fechado
+            }
+            tx[0]='e';tx[1]='s';tx[2]='\r';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            zerar_tx();
+  
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -372,8 +497,10 @@ void app_main() {
     setup();
     uart_queue_rx = xQueueCreate(10, sizeof(char[13]));
     uart_queue_tx = xQueueCreate(10, sizeof(char[13]));
+    queue_atendimentos = xQueueCreate(50, sizeof(int)); //50 elementos do tipo int
     xTaskCreate(uart_rx_task, "uart_rx_task", 4096, NULL, 10, NULL);
     xTaskCreate(uart_tx_task, "uart_tx_task", 4096, NULL, 10, NULL);
     xTaskCreate(led_blink_task, "led_blink_task", 4096, NULL, 10, NULL);
     xTaskCreate(command_processor_task, "command_processor_task", 4096, NULL, 10, NULL);
+    xTaskCreate(atendimentos_task, "command_processor_task", 4096, NULL, 10, NULL);
 }

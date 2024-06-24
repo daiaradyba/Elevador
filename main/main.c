@@ -211,10 +211,14 @@ unsigned long timerled, timerelevador;
 const char *alive_msg = "alive";
 static const char *TAG = "Elevador";
 
-void zerar_serial(void) {
-    memset(rx, 0, sizeof(rx));
+void zerar_rx(void) {
     memset(tx, 0, sizeof(tx));
 }
+
+void zerar_tx(void) {
+    memset(tx, 0, sizeof(tx));
+}
+
 
 void init_uart() {
     const uart_config_t uart_config = {
@@ -264,22 +268,32 @@ void setup() {
 void uart_rx_task(void *pvParameters) {
    
     int index = 0;
+    char rx_char[2]; // Buffer para armazenar o caractere recebido como string
 
     while (1) {
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)&rx[index], 1, 20 / portTICK_PERIOD_MS);
         if (len > 0) {
-            post_finished_to_firebase("entrei rx_task", "RX Task");
-            post_finished_to_firebase(rx, "RX Task");
-            if (rx[index] == 0x0A) { //0x0A = \n
+            //post_finished_to_firebase("entrei rx_task", "RX Task");
+            //post_finished_to_firebase(rx, "RX Task valor");
+            
+            // Converte o caractere recebido para string e envia ao Firebase
+            //snprintf(rx_char, sizeof(rx_char), "%c", rx[index]);
+
+
+            //post_finished_to_firebase(rx_char, "RX Task valor caracter");
+           
+
+            if (rx[index] == '\n') { //0x0A = \n
                 rx[index + 1] = '\0';
                 xQueueSend(uart_queue, &rx, portMAX_DELAY);
-                zerar_serial();
-                post_finished_to_firebase("Enviei pra fila", "RX Task");
+                zerar_rx();
+                post_finished_to_firebase("Enviei pra fila", "RX Task fila");
                 index = 0;
             } else {
                 index++;
                 if (index >= 13) {
                     index = 0;
+                    zerar_rx();
                 }
             }
             
@@ -300,15 +314,12 @@ void command_processor_task(void *pvParameters) {
             }*/
            post_finished_to_firebase(rx, "Rx dentro do command processor");
            
-            if (rx[12] == 'r') {
-                post_finished_to_firebase(rx, "Entrei em R com mensagem:");
-
                 if (strncmp(rx, "initialized", 11) == 0) {
                     post_finished_to_firebase("initialized", "Entrei em initialized");
                     vTaskDelay(pdMS_TO_TICKS(10000));
-                    const char *reset_msg = "er\r";
-                    uart_write_bytes(UART_NUM_0, reset_msg, strlen(reset_msg));
-                    post_finished_to_firebase("er", "Escrevi UART");
+                    tx[0]='e';tx[1]='r';tx[2]='\r';
+                    uart_write_bytes(UART_NUM_0, tx, strlen(tx));
+                    post_finished_to_firebase(tx, "Escrevi UART");
                     esquerdo.andar = 0;
                     esquerdo.estado = 'P';
                     esquerdo.prox = 0;
@@ -320,12 +331,13 @@ void command_processor_task(void *pvParameters) {
                     memset(esquerdo.btc_up, 0, sizeof(esquerdo.btc_up));
                     memset(esquerdo.seq_up, 0, sizeof(esquerdo.seq_up));
                     memset(esquerdo.seq_down, 0, sizeof(esquerdo.seq_down));
-                    zerar_serial();
+                   zerar_tx();
                 }
 
-                zerar_serial();
-            }
+              
+            
         }
+         zerar_tx();
     }
 }
 
@@ -334,7 +346,7 @@ void uart_tx_task(void *pvParameters) {
     while (1) {
         contador++;
         if (contador > 30) {
-            uart_write_bytes(UART_NUM_0, alive_msg, strlen(alive_msg));
+            //uart_write_bytes(UART_NUM_0, alive_msg, strlen(alive_msg));
             contador = 0;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
@@ -354,6 +366,7 @@ void led_blink_task(void *pvParameters) {
 }
 
 void app_main() {
+    esp_log_level_set("*", ESP_LOG_NONE); // Desativa todos os logs
     setup();
     uart_queue = xQueueCreate(10, sizeof(char[13]));
     xTaskCreate(uart_rx_task, "uart_rx_task", 4096, NULL, 10, NULL);

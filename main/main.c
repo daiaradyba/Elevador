@@ -27,7 +27,8 @@ static const int RX_BUF_SIZE = 1024;
 
 static bool http_get_task_running = false;
 
-QueueHandle_t uart_queue;
+QueueHandle_t uart_queue_rx;
+QueueHandle_t uart_queue_tx;
 
 esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
     static char *output_buffer;  // Buffer to store response of http request from event handler
@@ -285,7 +286,7 @@ void uart_rx_task(void *pvParameters) {
 
             if (rx[index] == '\n') { //0x0A = \n
                 rx[index + 1] = '\0';
-                xQueueSend(uart_queue, &rx, portMAX_DELAY);
+                xQueueSend(uart_queue_rx, &rx, portMAX_DELAY);
                 zerar_rx();
                 post_finished_to_firebase("Enviei pra fila", "RX Task fila");
                 index = 0;
@@ -303,23 +304,24 @@ void uart_rx_task(void *pvParameters) {
 }
 
 void command_processor_task(void *pvParameters) {
-    char rx[13];
+    char rx_processor[13];
     while (1) {
-        if (xQueueReceive(uart_queue, &rx, portMAX_DELAY)) {
+        if (xQueueReceive(uart_queue_rx, &rx_processor, portMAX_DELAY)) {
              post_finished_to_firebase("Recebi nova fila", "RX Process Task");
             char field_name[5];
             /*for (int i = 0; i < 13; i++) {
                 snprintf(field_name, sizeof(field_name), "rx%d", i);
                 post_finished_to_firebase(&rx[i], field_name);
             }*/
-           post_finished_to_firebase(rx, "Rx dentro do command processor");
+           post_finished_to_firebase(rx_processor, "Rx dentro do command processor");
            
-                if (strncmp(rx, "initialized", 11) == 0) {
+                if (strncmp(rx_processor, "initialized", 11) == 0) {
                     post_finished_to_firebase("initialized", "Entrei em initialized");
-                    vTaskDelay(pdMS_TO_TICKS(10000));
+                    vTaskDelay(pdMS_TO_TICKS(3000));
                     tx[0]='e';tx[1]='r';tx[2]='\r';
-                    uart_write_bytes(UART_NUM_0, tx, strlen(tx));
-                    post_finished_to_firebase(tx, "Escrevi UART");
+                    xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                   
+                  
                     esquerdo.andar = 0;
                     esquerdo.estado = 'P';
                     esquerdo.prox = 0;
@@ -342,12 +344,12 @@ void command_processor_task(void *pvParameters) {
 }
 
 void uart_tx_task(void *pvParameters) {
-    int contador = 0;
+    char tx_task[13];
     while (1) {
-        contador++;
-        if (contador > 30) {
-            //uart_write_bytes(UART_NUM_0, alive_msg, strlen(alive_msg));
-            contador = 0;
+
+       if (xQueueReceive(uart_queue_tx, &tx_task, portMAX_DELAY)) {
+            uart_write_bytes(UART_NUM_0, tx_task, strlen(tx_task));
+            post_finished_to_firebase(tx_task, "Escrevi UART");
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -368,7 +370,8 @@ void led_blink_task(void *pvParameters) {
 void app_main() {
     esp_log_level_set("*", ESP_LOG_NONE); // Desativa todos os logs
     setup();
-    uart_queue = xQueueCreate(10, sizeof(char[13]));
+    uart_queue_rx = xQueueCreate(10, sizeof(char[13]));
+    uart_queue_tx = xQueueCreate(10, sizeof(char[13]));
     xTaskCreate(uart_rx_task, "uart_rx_task", 4096, NULL, 10, NULL);
     xTaskCreate(uart_tx_task, "uart_tx_task", 4096, NULL, 10, NULL);
     xTaskCreate(led_blink_task, "led_blink_task", 4096, NULL, 10, NULL);

@@ -1,24 +1,34 @@
-# _Sample project_
+# _Projeto de Sistemas Embarcados - Controle Elevador_
 
-(See the README.md file in the upper level 'examples' directory for more information about examples.)
+pipipipopopo este projeto tem por objetivo realizar o controle de um elevador...
 
-This is the simplest buildable example. The example is used by command `idf.py create-project`
-that copies the project to user specified path and set it's name. For more information follow the [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project)
+## Requisitos de projeto
 
+Realização do controle do Elevador Esquerdo
+Utilização dos botões das cabines (Central e Direita como marcadores das solicitações de corredor, onde cabine central será a marcação de controle de aperto para descer e a cabine da direita a marcação de controle para subir)
+Requisitos mínimos no Sistema:
+-3xTarefas
+-1xFila
+-1xGateKeeper
 
+## Instruções de uso
+Debug feito com a utilização do Firebase para visualização dos dados, alterar SSID e senha para seu wifi em:
+#define WIFI_SSID      "********" ->SSID
+#define WIFI_PASS      "********" ->password
 
-## How to use example
-We encourage the users to use the example as a template for the new projects.
-A recommended way is to follow the instructions on a [docs page](https://docs.espressif.com/projects/esp-idf/en/latest/api-guides/build-system.html#start-a-new-project).
+Framework utilizado: ESP-IDF (Espressif), para instalação utilizar o instalador: https://dl.espressif.com/dl/esp-idf/?idf=4.4
 
-## Example folder contents
+Para dar Build no projeto e Flashar o MC seguir os passos abaixo:
+_cd_ pasta_do_projeto_
+_idf.py set-target esp32_
+_idf.py build_
+_idf.py -p port flash_
 
-The project **sample_project** contains one source file in C language [main.c](main/main.c). The file is located in folder [main](main).
+## ANOTAÇÕES
 
-ESP-IDF projects are built using CMake. The project build configuration is contained in `CMakeLists.txt`
-files that provide set of directives and instructions describing the project's source files and targets
-(executable, library, or both). 
+colocar alterações feitas
 
+## Estrutura do projeto
 Below is short explanation of remaining files in the project folder.
 
 ```

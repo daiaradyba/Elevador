@@ -19,11 +19,12 @@ Debug feito com a utilização do Firebase para visualização dos dados, altera
 Framework utilizado: ESP-IDF (Espressif), para instalação utilizar o instalador: https://dl.espressif.com/dl/esp-idf/?idf=4.4
 
 Para dar Build no projeto e Flashar o MC seguir os passos abaixo:<br>
-_cd_ pasta_do_projeto_<br>
-_idf.py set-target esp32_<br>
-_idf.py build_<br>
-_idf.py -p port flash_<br>
-
+```
+cd_ pasta_do_projeto
+idf.py set-target esp32
+idf.py build
+idf.py -p port flash
+```
 ## ANOTAÇÕES
 
 - colocar alterações feitas

@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <string.h>
 #include <driver/uart.h>
@@ -18,8 +17,8 @@
 static const int RX_BUF_SIZE = 1024;
 #define LED_BUILTIN GPIO_NUM_2
 
-#define WIFI_SSID      "Dyba_Bernardelli_2G"
-#define WIFI_PASS      "123581321"
+#define WIFI_SSID      "********"
+#define WIFI_PASS      "********"
 #define MAX_HTTP_RECV_BUFFER 1024
 #define MAX_COMMAND_LENGTH 1024
 #define ESP_INTR_FLAG_DEFAULT 0

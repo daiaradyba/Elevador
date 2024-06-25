@@ -1,3 +1,8 @@
 build/
 sdkconfig
 sdkconfig.old
+.devcontainer/
+.git/
+.vscode/
+Enviando
+tratar

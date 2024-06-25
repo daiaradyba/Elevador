@@ -19,8 +19,8 @@
 
 static const int RX_BUF_SIZE = 1024;
 #define LED_BUILTIN GPIO_NUM_2
-#define WIFI_SSID      "********"
-#define WIFI_PASS      "********"
+#define WIFI_SSID      "Dyba_Bernardelli_2G"
+#define WIFI_PASS      "123581321"
 #define MAX_HTTP_RECV_BUFFER 1024
 #define MAX_COMMAND_LENGTH 1024
 #define ESP_INTR_FLAG_DEFAULT 0
@@ -182,6 +182,7 @@ void uart_tx_task(void *pvParameters) {
             uart_write_bytes(UART_NUM_0, tx_task, strlen(tx_task));
             post_finished_to_firebase(tx_task, "Escrevi UART");
             memset(tx_task, 0, sizeof(tx_task));
+            zerar_tx();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -311,13 +312,6 @@ void command_processor_task(void *pvParameters) {
                 break;                
             }
         if(new_request!= -1){
-            if(esquerdo.estado == 'A'){
-                //manda fechar a porta
-                tx[0]='e';tx[1]='f';tx[2]='\r';
-                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-                zerar_tx();
-            }
-
             xQueueSend(queue_atendimentos, &new_request, portMAX_DELAY);
             post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
         }
@@ -333,16 +327,43 @@ void command_processor_task(void *pvParameters) {
 //Atendimentos são os andares.
 void atendimentos_task(void *pvParameters) {
     int atendimento_task;
+    int delay = 0;
 
     while (1) {
 
        if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
+        //Fecha a porta e vai até o andar solicitado
           post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
-            while(esquerdo.estado=='A'){
-                     vTaskDelay(pdMS_TO_TICKS(10)); //Aguardo alterar estado para fechado
+            if(esquerdo.estado == 'A'){
+                //manda fechar a porta
+                tx[0]='e';tx[1]='f';tx[2]='\r';
+                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
             }
+            //Espera porta fechar
+            while(esquerdo.estado=='A'){vTaskDelay(pdMS_TO_TICKS(10));} 
+           
+           //Manda subir
             tx[0]='e';tx[1]='s';tx[2]='\r';
             xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            esquerdo.estado = 'S';
+
+            //Espera x milisegundos
+            delay = atendimento_task*5000;
+            vTaskDelay(pdMS_TO_TICKS(delay));
+
+            //Manda parar
+            tx[0]='e';tx[1]='p';tx[2]='\r';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            esquerdo.estado = 'P';
+
+            //Manda abrir porta
+            tx[0]='e';tx[1]='a';tx[2]='\r';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            esquerdo.estado = 'P';
+
+
+
+
             zerar_tx();
   
         }

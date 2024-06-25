@@ -16,7 +16,6 @@
 
 static const int RX_BUF_SIZE = 1024;
 #define LED_BUILTIN GPIO_NUM_2
-
 #define WIFI_SSID      "********"
 #define WIFI_PASS      "********"
 #define MAX_HTTP_RECV_BUFFER 1024
@@ -30,10 +29,10 @@ QueueHandle_t uart_queue_rx;
 QueueHandle_t uart_queue_tx;
 QueueHandle_t queue_atendimentos;
 
+/*COISAS DE FIREBASE E WIFI*/
 esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
     static char *output_buffer;  // Buffer to store response of http request from event handler
     static int output_len;       // Stores number of bytes read
-
     switch(evt->event_id) {
         case HTTP_EVENT_ERROR:
             ESP_LOGI("TAG", "HTTP_EVENT_ERROR");
@@ -48,9 +47,7 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
             ESP_LOGI("TAG", "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
             break;
         case HTTP_EVENT_ON_DATA:
-            // Check for chunked encoding is set to false
             if (!esp_http_client_is_chunked_response(evt->client)) {
-                // If user_data buffer is configured, copy the response into the buffer
                 if (evt->user_data) {
                     memcpy(evt->user_data + output_len, evt->data, evt->data_len);
                 } else {
@@ -70,7 +67,6 @@ esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
         case HTTP_EVENT_ON_FINISH:
             ESP_LOGI("TAG", "HTTP_EVENT_ON_FINISH");
             if (output_buffer != NULL) {
-                // Response is not chunked
                 free(output_buffer);
                 output_buffer = NULL;
             }
@@ -96,21 +92,17 @@ void post_finished_to_firebase(const char* message, const char* campo) {
     const char* url = "https://elevador-c3c39-default-rtdb.firebaseio.com/.json";
     char post_data[256];
     snprintf(post_data, sizeof(post_data), "{\"%s\": \"%s\"}", campo, message);
-
     esp_http_client_config_t config = {
         .url = url,
         .method = HTTP_METHOD_PATCH,
     };
-
     esp_http_client_handle_t client = esp_http_client_init(&config);
     if (client == NULL) {
         ESP_LOGE("TAG", "Failed to initialize HTTP client");
         return;
     }
-
     esp_http_client_set_post_field(client, post_data, strlen(post_data));
     esp_err_t err = esp_http_client_perform(client);
-
     if (err == ESP_OK) {
         int status_code = esp_http_client_get_status_code(client);
         if (status_code == 200) {
@@ -121,11 +113,10 @@ void post_finished_to_firebase(const char* message, const char* campo) {
     } else {
         ESP_LOGE("TAG", "HTTP POST request failed: %s", esp_err_to_name(err));
     }
-
     esp_http_client_cleanup(client);
 }
 
-// Handler para eventos do Wi-Fi
+//Handler para eventos do Wi-Fi
 void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
@@ -176,9 +167,10 @@ void wifi_init() {
     esp_wifi_start();
 }
 
+//
 struct elevador {
     char andar;
-    char estado; //A = Aberto. F = Fechado. S = Subindo D= Descendo
+    char estado; 
     char prox;
     char btc_up[15];
     char btc_down[15];

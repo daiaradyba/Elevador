@@ -16,15 +16,24 @@ Debug feito com a utilização do Firebase para visualização dos dados, altera
 #define WIFI_SSID      "********" ->SSID<br>
 #define WIFI_PASS      "********" ->password<br>
 
-Framework utilizado: ESP-IDF (Espressif), para instalação utilizar o instalador: https://dl.espressif.com/dl/esp-idf/?idf=4.4
+Framework utilizado: ESP-IDF (Espressif), para instalação utilizar o instalador: <br> https://dl.espressif.com/dl/esp-idf/?idf=4.4
 
 Para dar Build no projeto e Flashar o MC seguir os passos abaixo:<br>
 ```
-cd_ pasta_do_projeto
+cd pasta_do_projeto
 idf.py set-target esp32
 idf.py build
 idf.py -p port flash
 ```
+## PROTOCOLO BÁSICO
+
+| Código |   Hex   | Ação |
+|--------|---------|-------------|
+| A      | FF      | Aberto      |
+| F      | FF      | Fechado      |
+| S      | FF      | Sobe     |
+| D      | FF      | Desce      |
+
 ## ANOTAÇÕES
 
 - colocar alterações feitas

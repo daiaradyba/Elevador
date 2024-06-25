@@ -42,7 +42,8 @@ struct elevador {
     char n_seq_up;
     char n_seq_down;
     char porta;
-} esquerdo;                                         //definicao do elevador 
+} esquerdo; 
+                                        //definicao do elevador 
 char flagcabine, flagcorredorup, flagcorredordown;  //flags de eventos
 char rx[13], tx[4], last;                           //variaveis de UART
 char i, j;                                          //contadores genericos

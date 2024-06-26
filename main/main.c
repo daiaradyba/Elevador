@@ -31,7 +31,8 @@ QueueHandle_t uart_queue_tx;
 QueueHandle_t queue_atendimentos;
 struct elevador {
     char andar;
-    char estado; 
+    char estado;
+    int floor; 
     char prox;
     char btc_up[15];
     char btc_down[15];
@@ -42,8 +43,7 @@ struct elevador {
     char n_seq_up;
     char n_seq_down;
     char porta;
-} esquerdo; 
-                                        //definicao do elevador 
+} esquerdo;                                         //definicao do elevador 
 char flagcabine, flagcorredorup, flagcorredordown;  //flags de eventos
 char rx[13], tx[4], last;                           //variaveis de UART
 char i, j;                                          //contadores genericos
@@ -63,6 +63,7 @@ void command_processor_task(void *pvParameters);
 void uart_tx_task(void *pvParameters);
 void atendimentos_task(void *pvParameters);
 void led_blink_task(void *pvParameters);
+
 //wifi e firebase
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 void post_finished_to_firebase(const char* message, const char* campo);
@@ -94,6 +95,7 @@ void setup() {
 
     esquerdo.andar = 0;
     esquerdo.estado = 'P';
+    esquerdo.floor = 0;
     esquerdo.prox = 0;
     esquerdo.n_btc_in = 0;
     esquerdo.n_seq_up = 0;
@@ -146,20 +148,18 @@ void uart_rx_task(void *pvParameters) {
         int len = uart_read_bytes(UART_NUM_0, (uint8_t *)&rx[index], 1, 20 / portTICK_PERIOD_MS);
         if (len > 0) {
             //post_finished_to_firebase("entrei rx_task", "RX Task");
-            //post_finished_to_firebase(rx, "RX Task valor");
+           // post_finished_to_firebase(rx, "RX Task valor");
             
             // Converte o caractere recebido para string e envia ao Firebase
             //snprintf(rx_char, sizeof(rx_char), "%c", rx[index]);
 
-
             //post_finished_to_firebase(rx_char, "RX Task valor caracter");
-           
-
+     
             if (rx[index] == '\n') { //0x0A = \n
                 rx[index + 1] = '\0';
                 xQueueSend(uart_queue_rx, &rx, portMAX_DELAY);
                 zerar_rx();
-                post_finished_to_firebase("Enviei pra fila", "RX Task fila");
+                //post_finished_to_firebase("Enviei pra fila", "RX Task fila");
                 index = 0;
             } else {
                 index++;
@@ -180,9 +180,8 @@ void uart_tx_task(void *pvParameters) {
 
        if (xQueueReceive(uart_queue_tx, &tx_task, portMAX_DELAY)) {
             uart_write_bytes(UART_NUM_0, tx_task, strlen(tx_task));
-            post_finished_to_firebase(tx_task, "Escrevi UART");
+            //post_finished_to_firebase(tx_task, "Escrevi UART");
             memset(tx_task, 0, sizeof(tx_task));
-            zerar_tx();
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
@@ -192,23 +191,24 @@ void command_processor_task(void *pvParameters) {
     char rx_processor[13];
     while (1) {
         if (xQueueReceive(uart_queue_rx, &rx_processor, portMAX_DELAY)) {
-             post_finished_to_firebase("Recebi nova fila", "RX Process Task");
+            // post_finished_to_firebase("Recebi nova fila", "RX Process Task");
             char field_name[5];
             /*for (int i = 0; i < 13; i++) {
                 snprintf(field_name, sizeof(field_name), "rx%d", i);
                 post_finished_to_firebase(&rx[i], field_name);
             }*/
-           post_finished_to_firebase(rx_processor, "Rx dentro do command processor");
+           //post_finished_to_firebase(rx_processor, "Rx dentro do command processor");
            
            //comando de inicialização
             if (strncmp(rx_processor, "initialized", 11) == 0) {
-                    post_finished_to_firebase("initialized", "Entrei em initialized");
+                   // post_finished_to_firebase("initialized", "Entrei em initialized");
                     vTaskDelay(pdMS_TO_TICKS(3000));
                     tx[0]='e';tx[1]='r';tx[2]='\r';
                     xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-                     post_finished_to_firebase("Enviei pra fila", "Enviar fila tx");
+                     //post_finished_to_firebase("Enviei pra fila", "Enviar fila tx");
                     esquerdo.andar = 0;
                     esquerdo.estado = 'P';
+                    esquerdo.floor = 0;
                     esquerdo.prox = 0;
                     esquerdo.n_btc_in = 0;
                     esquerdo.n_seq_up = 0;
@@ -232,16 +232,49 @@ void command_processor_task(void *pvParameters) {
         if (strncmp(rx_processor, "eA", 2) == 0) {
              esquerdo.estado = 'A';
         }
+        
+        if (strncmp(rx_processor, "e1", 2) == 0) {
+            esquerdo.floor = 1;
+        } else if (strncmp(rx_processor, "e2", 2) == 0) {
+            esquerdo.floor = 2;
+        } else if (strncmp(rx_processor, "e3", 2) == 0) {
+            esquerdo.floor = 3;
+        } else if (strncmp(rx_processor, "e4", 2) == 0) {
+            esquerdo.floor = 4;
+        } else if (strncmp(rx_processor, "e5", 2) == 0) {
+            esquerdo.floor = 5;
+        } else if (strncmp(rx_processor, "e6", 2) == 0) {
+            esquerdo.floor = 6;
+        } else if (strncmp(rx_processor, "e7", 2) == 0) {
+            esquerdo.floor = 7;
+        } else if (strncmp(rx_processor, "e8", 2) == 0) {
+            esquerdo.floor = 8;
+        } else if (strncmp(rx_processor, "e9", 2) == 0) {
+            esquerdo.floor = 9;
+        } else if (strncmp(rx_processor, "e10", 3) == 0) {  
+            esquerdo.floor = 10;
+        } else if (strncmp(rx_processor, "e11", 3) == 0) {  
+            esquerdo.floor = 11;
+        } else if (strncmp(rx_processor, "e12", 3) == 0) {  
+            esquerdo.floor = 12;
+        } else {
+            esquerdo.floor = 0;
+        }
+
+        char int_convertido[20];
+        sprintf(int_convertido, "%d", esquerdo.floor);
+      //  post_finished_to_firebase(int_convertido, "esquerdo.floor");
+
 
         //atendimentos solicitados dentro do elevador
         if (strncmp(rx_processor, "eI", 2) == 0) {
             char command_temp[30];
-            char caracter_andar_destino = 'z';
+            char caracter_andar_destino = 'f';
             char destino_char[2]; // Buffer para armazenar o caractere recebido como string
 
             caracter_andar_destino = rx_processor[2];
             snprintf(destino_char, sizeof(destino_char), "%c", caracter_andar_destino);
-            post_finished_to_firebase(destino_char, "caracter destino");
+           // post_finished_to_firebase(destino_char, "caracter destino");
             
             //Processa e manda para fila de atendimentos
             int new_request = -1;
@@ -249,76 +282,65 @@ void command_processor_task(void *pvParameters) {
             switch(caracter_andar_destino){
                 case 'a':
                 new_request = 0;
-                break;
-                
+                break;              
                 case 'b':
                 new_request = 1;
                 break; 
-
                 case 'c':
                 new_request = 2;
                 break;  
-
                 case 'd':
                 new_request = 3;
                 break;  
-
                 case 'e':
                 new_request = 4;
                 break;  
-
                 case 'f':
                 new_request = 5;
                 break;  
-
                 case 'g':
                 new_request = 6;
                 break;  
-
                 case 'h':
                 new_request = 7;
                 break;  
-
                 case 'i':
                 new_request = 8;
                 break;  
-
                 case 'j':
                 new_request = 9;
                 break;  
-
                 case 'k':
                 new_request = 10;
                 break;  
-
                 case 'l':
                 new_request = 11;
                 break;  
-
                 case 'm':
                 new_request = 12;
                 break;  
-
                 case 'n':
                 new_request = 13;
                 break;  
-
                 case 'o':
                 new_request = 14;
                 break;  
-
                 case 'p':
                 new_request = 15;
                 break;                
             }
         if(new_request!= -1){
+            //Ligar led botão elevador
+            tx[0]='e';tx[1]='L';tx[2] = caracter_andar_destino;tx[3]='\r';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            zerar_tx();
+            vTaskDelay(pdMS_TO_TICKS(100));
+
             xQueueSend(queue_atendimentos, &new_request, portMAX_DELAY);
-            post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
+           // post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
         }
         }
-        memset(rx_processor, 0, sizeof(rx_processor));
-              
-            
+        memset(rx_processor, 0, sizeof(rx_processor));            
         }
          zerar_tx();
     }
@@ -327,45 +349,160 @@ void command_processor_task(void *pvParameters) {
 //Atendimentos são os andares.
 void atendimentos_task(void *pvParameters) {
     int atendimento_task;
-    int delay = 0;
+    int step_floor = 0;
+    char atendimento_task_convertido[20];
+    char esquerdo_floor_convertido[20];
+    char step_floor_convertido[20];
+
+    char caracter_destino = 'z';
+
 
     while (1) {
-
        if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
-        //Fecha a porta e vai até o andar solicitado
-          post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
+          //post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
+
+        
             if(esquerdo.estado == 'A'){
-                //manda fechar a porta
-                tx[0]='e';tx[1]='f';tx[2]='\r';
-                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                    //manda fechar a porta
+                    tx[0]='e';tx[1]='f';tx[2]='\r';
+                    xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                    zerar_tx();
+                }
+
+            while(esquerdo.estado=='A'){
+                     vTaskDelay(pdMS_TO_TICKS(10)); //Aguardo alterar estado para fechado
             }
-            //Espera porta fechar
-            while(esquerdo.estado=='A'){vTaskDelay(pdMS_TO_TICKS(10));} 
+             //post_finished_to_firebase("Fechada", "Porta");
+
+             //sprintf(atendimento_task_convertido,"%d", atendimento_task);
+             //post_finished_to_firebase(atendimento_task_convertido, "atendimento_task");
+
+             //sprintf(esquerdo_floor_convertido,"%d", esquerdo.floor);
+             //post_finished_to_firebase(esquerdo_floor_convertido, "esquerdo.flor");
+
+            step_floor = atendimento_task  - esquerdo.floor;             //passo andar desejado - andar atual
+            //sprintf(step_floor_convertido,"%d", step_floor);
+            //post_finished_to_firebase(step_floor_convertido, "step_flor");
+
+            //valor 1 para teste, comentar o if e descomentar o while   
+            while(step_floor != 0){                                     //enquanto a diferença for diferente de 0 (andar desejado != andar atual)
            
-           //Manda subir
-            tx[0]='e';tx[1]='s';tx[2]='\r';
-            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-            esquerdo.estado = 'S';
+             vTaskDelay(pdMS_TO_TICKS(100)); //Atender outras tasks
+           
+            //if(esquerdo.floor == 1){
+                //sprintf(step_floor_convertido,"%d", step_floor);
+                //post_finished_to_firebase(step_floor_convertido, "step_flor");
 
-            //Espera x milisegundos
-            delay = atendimento_task*5000;
-            vTaskDelay(pdMS_TO_TICKS(delay));
+                if(step_floor < 0){
+                    tx[0]='e';tx[1]='d';tx[2]='\r'; 
+                }//caso seja menor que zero (andar menor) desce
 
-            //Manda parar
+
+                if(step_floor > 0){ //caso seja maior que zero (andar maior) sobe
+                    tx[0]='e';tx[1]='s';tx[2]='\r';
+                }
+                     
+                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                zerar_tx();
+
+                step_floor = atendimento_task - esquerdo.floor;
+            }            
+
+            //controle por tempo
+            /*int time_ms = 0;
+            switch (step_floor) {
+                case 1: time_ms = 3735; break;
+                case 2: time_ms = 3730; break;
+                case 3: time_ms = 3720; break;
+                case 4: time_ms = 3710; break;
+                case 5: time_ms = 3705; break;
+                case 6: time_ms = 3700; break;
+                case 7: time_ms = 3740; break;
+                case 8: time_ms = 3730; break;
+                case 9: time_ms = 3720; break;
+                case 10: time_ms = 3710; break;
+                case 11: time_ms = 3705; break;
+                case 12: time_ms = 3700; break;
+                default: time_ms = 3700; 
+            }
+            vTaskDelay(pdMS_TO_TICKS(time_ms * step_floor));
+            */
+           vTaskDelay(pdMS_TO_TICKS(500));
             tx[0]='e';tx[1]='p';tx[2]='\r';
-            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
             esquerdo.estado = 'P';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            zerar_tx();  
 
-            //Manda abrir porta
+            vTaskDelay(pdMS_TO_TICKS(100));
             tx[0]='e';tx[1]='a';tx[2]='\r';
+            esquerdo.estado = 'A';
             xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-            esquerdo.estado = 'P';
+            zerar_tx(); 
 
+            switch(atendimento_task){
+                case 0:
+                    caracter_destino = 'a';
+                break;
+                case 1:
+                    caracter_destino = 'b';
+                break;
+                case 2:
+                    caracter_destino = 'c';
+                break;
+                case 3:
+                    caracter_destino = 'd';
+                break;
+                case 4:
+                    caracter_destino = 'e';
+                break;
+                case 5:
+                    caracter_destino = 'f';
+                break;
+                case 6:
+                    caracter_destino = 'g';
+                break;
+                case 7:
+                    caracter_destino = 'h';
+                break;
+                case 8:
+                    caracter_destino = 'i';
+                break;
+                case 9:
+                    caracter_destino = 'j';
+                break;
+                case 10:
+                    caracter_destino = 'k';
+                break;
+                case 11:
+                    caracter_destino = 'l';
+                break;
+                case 12:
+                    caracter_destino = 'm';
+                break;
+                case 13:
+                    caracter_destino = 'n';
+                break;
+                case 14:
+                    caracter_destino = 'o';
+                break;
+                case 15:
+                    caracter_destino = 'p';
+                break;
+            }
+           
+            vTaskDelay(pdMS_TO_TICKS(100));
+            tx[0]='e';tx[1]='D';tx[2]=caracter_destino;tx[3]='\r';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            zerar_tx(); 
 
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            tx[0]='e';tx[1]='f';tx[2]='\r';
+            esquerdo.estado = 'F';
+            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+            zerar_tx(); 
 
-
-            zerar_tx();
-  
+            // Atualiza o valor anterior de atendimento_task
+            //previous_atendimento_task = atendimento_task;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }

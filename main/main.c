@@ -258,6 +258,11 @@ void command_processor_task(void *pvParameters) {
         } else if (strncmp(rx_processor, "e12", 3) == 0) {  
             esquerdo.floor = 12;
         } 
+        else if (strncmp(rx_processor, "e0", 2) == 0) {  
+            esquerdo.floor = 0;
+        } 
+
+
 
         char int_convertido[20];
         sprintf(int_convertido, "%d", esquerdo.floor);
@@ -359,7 +364,6 @@ void atendimentos_task(void *pvParameters) {
        if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
           //post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
 
-        
             if(esquerdo.estado == 'A'){
                     //manda fechar a porta
                     tx[0]='e';tx[1]='f';tx[2]='\r';
@@ -388,8 +392,8 @@ void atendimentos_task(void *pvParameters) {
              vTaskDelay(pdMS_TO_TICKS(100)); //Atender outras tasks
            
             //if(esquerdo.floor == 1){
-                sprintf(step_floor_convertido,"%d", step_floor);
-                post_finished_to_firebase(step_floor_convertido, "step_flor");
+                //sprintf(step_floor_convertido,"%d", step_floor);
+                //post_finished_to_firebase(step_floor_convertido, "step_flor");
 
                 if(step_floor < 0){
                     tx[0]='e';tx[1]='d';tx[2]='\r'; 

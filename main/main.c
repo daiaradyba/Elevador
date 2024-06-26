@@ -44,7 +44,12 @@ struct elevador {
     char n_seq_down;
     char porta;
 } esquerdo;                                         //definicao do elevador 
-char flagcabine, flagcorredorup, flagcorredordown;  //flags de eventos
+
+  //flags de eventos -1 não solicitado 1 solicitado
+int flagcabine = -1;
+int flagcorredorup = -1; 
+int flagcorredordown = -1;
+
 char rx[13], tx[4], last;                           //variaveis de UART
 char i, j;                                          //contadores genericos
 char temp[16];                                      //vetor temporario
@@ -280,69 +285,126 @@ void command_processor_task(void *pvParameters) {
            // post_finished_to_firebase(destino_char, "caracter destino");
             
             //Processa e manda para fila de atendimentos
-            int new_request = -1;
+            int new_request_cabine = -1;
 
             switch(caracter_andar_destino){
                 case 'a':
-                new_request = 0;
+                new_request_cabine = 100 + 0;
                 break;              
                 case 'b':
-                new_request = 1;
+                new_request_cabine = 100 + 1;
                 break; 
                 case 'c':
-                new_request = 2;
+                new_request_cabine = 100 + 2;
                 break;  
                 case 'd':
-                new_request = 3;
+                new_request_cabine = 100 + 3;
                 break;  
                 case 'e':
-                new_request = 4;
+                new_request_cabine = 100 + 4;
                 break;  
                 case 'f':
-                new_request = 5;
+                new_request_cabine = 100 + 5;
                 break;  
                 case 'g':
-                new_request = 6;
+                new_request_cabine = 100 + 6;
                 break;  
                 case 'h':
-                new_request = 7;
+                new_request_cabine = 100 + 7;
                 break;  
                 case 'i':
-                new_request = 8;
+                new_request_cabine = 100 + 8;
                 break;  
                 case 'j':
-                new_request = 9;
+                new_request_cabine = 100 + 9;
                 break;  
                 case 'k':
-                new_request = 10;
+                new_request_cabine = 100 + 10;
                 break;  
                 case 'l':
-                new_request = 11;
+                new_request_cabine = 100 + 11;
                 break;  
                 case 'm':
-                new_request = 12;
+                new_request_cabine = 100 + 12;
                 break;  
                 case 'n':
-                new_request = 13;
+                new_request_cabine = 100 + 13;
                 break;  
                 case 'o':
-                new_request = 14;
+                new_request_cabine = 100 + 14;
                 break;  
                 case 'p':
-                new_request = 15;
+                new_request_cabine = 100 + 15;
                 break;                
             }
-        if(new_request!= -1){
+        if(new_request_cabine!= -1){
             //Ligar led botão elevador
             tx[0]='e';tx[1]='L';tx[2] = caracter_andar_destino;tx[3]='\r';
             xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
             zerar_tx();
             vTaskDelay(pdMS_TO_TICKS(100));
-
-            xQueueSend(queue_atendimentos, &new_request, portMAX_DELAY);
+            xQueueSend(queue_atendimentos, &new_request_cabine, portMAX_DELAY);
            // post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
         }
         }
+
+         //atendimentos solicitados fora do elevador
+        if (strncmp(rx_processor, "eE", 2) == 0) {
+            char command_temp[30];
+            char caracter_andar_destino [3] = "ff";
+            char destino_char[2]; // Buffer para armazenar o caractere recebido como string
+
+            caracter_andar_destino[0] = rx_processor[2];
+            caracter_andar_destino[1] = rx_processor[3];
+            caracter_andar_destino[2] = '\0'; // Adiciona terminador nulo para formar uma string válida
+
+            // snprintf(destino_char, sizeof(destino_char), "%c", caracter_andar_destino);
+            // post_finished_to_firebase(destino_char, "caracter destino");
+            
+            // Processa e manda para fila de atendimentos
+            int new_request_corredor = -1;
+
+            if (strcmp(caracter_andar_destino, "00") == 0) {
+                new_request_corredor = 0;
+            } else if (strcmp(caracter_andar_destino, "01") == 0) {
+                new_request_corredor = 1;
+            } else if (strcmp(caracter_andar_destino, "02") == 0) {
+                new_request_corredor = 2;
+            } else if (strcmp(caracter_andar_destino, "03") == 0) {
+                new_request_corredor = 3;
+            } else if (strcmp(caracter_andar_destino, "04") == 0) {
+                new_request_corredor = 4;
+            } else if (strcmp(caracter_andar_destino, "05") == 0) {
+                new_request_corredor = 5;
+            } else if (strcmp(caracter_andar_destino, "06") == 0) {
+                new_request_corredor = 6;
+            } else if (strcmp(caracter_andar_destino, "07") == 0) {
+                new_request_corredor = 7;
+            } else if (strcmp(caracter_andar_destino, "08") == 0) {
+                new_request_corredor = 8;
+            } else if (strcmp(caracter_andar_destino, "09") == 0) {
+                new_request_corredor = 9;
+            } else if (strcmp(caracter_andar_destino, "10") == 0) {
+                new_request_corredor = 10;
+            } else if (strcmp(caracter_andar_destino, "11") == 0) {
+                new_request_corredor = 11;
+            } else if (strcmp(caracter_andar_destino, "12") == 0) {
+                new_request_corredor = 12;
+            } else if (strcmp(caracter_andar_destino, "13") == 0) {
+                new_request_corredor = 13;
+            } else if (strcmp(caracter_andar_destino, "14") == 0) {
+                new_request_corredor = 14;
+            } else if (strcmp(caracter_andar_destino, "15") == 0) {
+                new_request_corredor = 15;
+            }
+            if(new_request_corredor!= -1){
+
+                vTaskDelay(pdMS_TO_TICKS(100));
+                xQueueSend(queue_atendimentos, &new_request_corredor, portMAX_DELAY);
+            // post_finished_to_firebase("Enviei fila atendimentos", "Atendimentos");
+            }
+            }
+
         memset(rx_processor, 0, sizeof(rx_processor));            
         }
          zerar_tx();
@@ -358,10 +420,19 @@ void atendimentos_task(void *pvParameters) {
     char step_floor_convertido[20];
 
     char caracter_destino = 'z';
+    char flag_cabine_corredor = 'z'; // d = dentro da cabine f = fora da cabine
 
 
     while (1) {
        if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
+        //se atendimento > 100 = atendimento solicitado via cabine - pq somei antes de mandar pra fila
+        if(atendimento_task>=100){
+            flag_cabine_corredor = 'd';
+            atendimento_task -= 100;
+        }
+        else{
+            flag_cabine_corredor = 'f';
+        }
           //post_finished_to_firebase("Entrei fila atendimentos", "Atendimentos");
 
             if(esquerdo.estado == 'A'){
@@ -493,9 +564,12 @@ void atendimentos_task(void *pvParameters) {
             }
            
             vTaskDelay(pdMS_TO_TICKS(100));
-            tx[0]='e';tx[1]='D';tx[2]=caracter_destino;tx[3]='\r';
-            xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-            zerar_tx(); 
+            if(flag_cabine_corredor == 'd'){ //se for de dentro da cabine, desliga led
+                tx[0]='e';tx[1]='D';tx[2]=caracter_destino;tx[3]='\r';
+                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                zerar_tx(); 
+            }
+
 
             vTaskDelay(pdMS_TO_TICKS(2000));
             tx[0]='e';tx[1]='f';tx[2]='\r';

@@ -27,6 +27,9 @@ static bool http_get_task_running = false;
 QueueHandle_t uart_queue_rx;
 QueueHandle_t uart_queue_tx;
 QueueHandle_t queue_atendimentos;
+QueueHandle_t queue_atendimentos_cabine;
+QueueHandle_t queue_atendimentos_corredor;
+
 struct elevador {
     char andar;
     char estado;
@@ -62,7 +65,6 @@ void uart_rx_task(void *pvParameters);
 void command_processor_task(void *pvParameters);
 void uart_tx_task(void *pvParameters);
 void atendimentos_task(void *pvParameters);
-void led_blink_task(void *pvParameters);
 esp_err_t _http_event_handler(esp_http_client_event_t *evt);
 void post_finished_to_firebase(const char* message, const char* campo);
 void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
@@ -74,9 +76,10 @@ void app_main() {
     uart_queue_rx = xQueueCreate(10, sizeof(char[13]));
     uart_queue_tx = xQueueCreate(10, sizeof(char[13]));
     queue_atendimentos = xQueueCreate(50, sizeof(int));                 //capacidade de 50 atendimentos
+    queue_atendimentos_cabine = xQueueCreate(50, sizeof(int));          //capacidade de 50 atendimentos
+    queue_atendimentos_corredor = xQueueCreate(50, sizeof(int));        //capacidade de 50 atendimentos
     xTaskCreate(uart_rx_task, "uart_rx_task", 4096, NULL, 10, NULL);
     xTaskCreate(uart_tx_task, "uart_tx_task", 4096, NULL, 10, NULL);
-    xTaskCreate(led_blink_task, "led_blink_task", 4096, NULL, 10, NULL);
     xTaskCreate(command_processor_task, "command_processor_task", 4096, NULL, 10, NULL);
     xTaskCreate(atendimentos_task, "command_processor_task", 4096, NULL, 10, NULL);
 }
@@ -130,8 +133,7 @@ void init_uart() {
     ESP_LOGI(TAG, "UART initialized");
 }
 
-void uart_rx_task(void *pvParameters) {
-   
+void uart_rx_task(void *pvParameters) {   
     int index = 0;
     char rx_char[2]; //armazena caractere recebido
     while (1) {
@@ -165,15 +167,38 @@ void uart_tx_task(void *pvParameters) {
     }
 }
 
+void merge_queues() {
+    int request_cabine, request_corredor;
+    int merged_requests[16] = {0};  
+    //processa atendimento cabine
+    while (xQueueReceive(queue_atendimentos_cabine, &request_cabine, 0)) {
+        int floor = request_cabine - 100;
+        merged_requests[floor] = request_cabine;
+    }
+    //processa atendimento corredor
+    while (xQueueReceive(queue_atendimentos_corredor, &request_corredor, 0)) {
+        if (merged_requests[request_corredor] == 0) {
+            merged_requests[request_corredor] = request_corredor;
+        }
+    }
+    // Envia os atendimentos mesclados para a fila principal
+    for (int i = 0; i < 16; i++) {
+        if (merged_requests[i] != 0) {
+            xQueueSend(queue_atendimentos, &merged_requests[i], portMAX_DELAY);
+            vTaskDelay(pdMS_TO_TICKS(10));
+        }
+    }
+}
+
 void command_processor_task(void *pvParameters) {
     char rx_processor[13];
     while (1) {
         if (xQueueReceive(uart_queue_rx, &rx_processor, portMAX_DELAY)) {
             char field_name[5];
-            //inicializacao
+            // inicializacao
             if (strncmp(rx_processor, "initialized", 11) == 0) {
                 vTaskDelay(pdMS_TO_TICKS(3000));
-                tx[0]='e';tx[1]='r';tx[2]='\r';
+                tx[0] = 'e'; tx[1] = 'r'; tx[2] = '\r';
                 xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
                 esquerdo.andar = 0;
                 esquerdo.estado = 'P';
@@ -189,127 +214,96 @@ void command_processor_task(void *pvParameters) {
                 memset(esquerdo.seq_down, 0, sizeof(esquerdo.seq_down));
                 zerar_tx();
             }
-        //porta fechada
-        if (strncmp(rx_processor, "eF", 2) == 0) esquerdo.estado = 'F';
-        //porta aberta
-        if (strncmp(rx_processor, "eA", 2) == 0) esquerdo.estado = 'A';
-        //leitura do andar atual
-        if (strncmp(rx_processor, "e1", 2) == 0) esquerdo.floor = 1;
-        else if (strncmp(rx_processor, "e2", 2) == 0) esquerdo.floor = 2;
-        else if (strncmp(rx_processor, "e3", 2) == 0) esquerdo.floor = 3;
-        else if (strncmp(rx_processor, "e4", 2) == 0) esquerdo.floor = 4;
-        else if (strncmp(rx_processor, "e5", 2) == 0) esquerdo.floor = 5;
-        else if (strncmp(rx_processor, "e6", 2) == 0) esquerdo.floor = 6;
-        else if (strncmp(rx_processor, "e7", 2) == 0) esquerdo.floor = 7;
-        else if (strncmp(rx_processor, "e8", 2) == 0) esquerdo.floor = 8;
-        else if (strncmp(rx_processor, "e9", 2) == 0) esquerdo.floor = 9;
-        else if (strncmp(rx_processor, "e10", 3) == 0) esquerdo.floor = 10;
-        else if (strncmp(rx_processor, "e11", 3) == 0) esquerdo.floor = 11;
-        else if (strncmp(rx_processor, "e12", 3) == 0) esquerdo.floor = 12;
-        else if (strncmp(rx_processor, "e0", 2) == 0) esquerdo.floor = 0;
-        //atendimentos solicitados dentro do elevador
-        if (strncmp(rx_processor, "eI", 2) == 0) {
-            char command_temp[30];
-            char caracter_andar_destino = 'f';
-            char destino_char[2]; //armazena caractere recebido 
-            caracter_andar_destino = rx_processor[2];
-            snprintf(destino_char, sizeof(destino_char), "%c", caracter_andar_destino);
-            //processa e manda para fila de atendimentos
-            int new_request_cabine = -1;
-            switch(caracter_andar_destino){
-                case 'a':
-                new_request_cabine = 100 + 0;
-                break;              
-                case 'b':
-                new_request_cabine = 100 + 1;
-                break; 
-                case 'c':
-                new_request_cabine = 100 + 2;
-                break;  
-                case 'd':
-                new_request_cabine = 100 + 3;
-                break;  
-                case 'e':
-                new_request_cabine = 100 + 4;
-                break;  
-                case 'f':
-                new_request_cabine = 100 + 5;
-                break;  
-                case 'g':
-                new_request_cabine = 100 + 6;
-                break;  
-                case 'h':
-                new_request_cabine = 100 + 7;
-                break;  
-                case 'i':
-                new_request_cabine = 100 + 8;
-                break;  
-                case 'j':
-                new_request_cabine = 100 + 9;
-                break;  
-                case 'k':
-                new_request_cabine = 100 + 10;
-                break;  
-                case 'l':
-                new_request_cabine = 100 + 11;
-                break;  
-                case 'm':
-                new_request_cabine = 100 + 12;
-                break;  
-                case 'n':
-                new_request_cabine = 100 + 13;
-                break;  
-                case 'o':
-                new_request_cabine = 100 + 14;
-                break;  
-                case 'p':
-                new_request_cabine = 100 + 15;
-                break;                
-            }
-            if(new_request_cabine!= -1){
-                //liga led botão elevador
-                tx[0]='e';tx[1]='L';tx[2] = caracter_andar_destino;tx[3]='\r';
-                xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
-                zerar_tx();
-                vTaskDelay(pdMS_TO_TICKS(100));
-                xQueueSend(queue_atendimentos, &new_request_cabine, portMAX_DELAY);
+            // porta fechada
+            if (strncmp(rx_processor, "eF", 2) == 0) esquerdo.estado = 'F';
+            // porta aberta
+            if (strncmp(rx_processor, "eA", 2) == 0) esquerdo.estado = 'A';
+            // leitura do andar atual
+            if (strncmp(rx_processor, "e1", 2) == 0) esquerdo.floor = 1;
+            else if (strncmp(rx_processor, "e2", 2) == 0) esquerdo.floor = 2;
+            else if (strncmp(rx_processor, "e3", 2) == 0) esquerdo.floor = 3;
+            else if (strncmp(rx_processor, "e4", 2) == 0) esquerdo.floor = 4;
+            else if (strncmp(rx_processor, "e5", 2) == 0) esquerdo.floor = 5;
+            else if (strncmp(rx_processor, "e6", 2) == 0) esquerdo.floor = 6;
+            else if (strncmp(rx_processor, "e7", 2) == 0) esquerdo.floor = 7;
+            else if (strncmp(rx_processor, "e8", 2) == 0) esquerdo.floor = 8;
+            else if (strncmp(rx_processor, "e9", 2) == 0) esquerdo.floor = 9;
+            else if (strncmp(rx_processor, "e10", 3) == 0) esquerdo.floor = 10;
+            else if (strncmp(rx_processor, "e11", 3) == 0) esquerdo.floor = 11;
+            else if (strncmp(rx_processor, "e12", 3) == 0) esquerdo.floor = 12;
+            else if (strncmp(rx_processor, "e0", 2) == 0) esquerdo.floor = 0;
+            // atendimentos solicitados dentro do elevador
+            if (strncmp(rx_processor, "eI", 2) == 0) {
+                char command_temp[30];
+                char caracter_andar_destino = 'f';
+                char destino_char[2]; // armazena caractere recebido 
+                caracter_andar_destino = rx_processor[2];
+                snprintf(destino_char, sizeof(destino_char), "%c", caracter_andar_destino);
+                // processa e manda para fila de atendimentos
+                int new_request_cabine = -1;
+                switch (caracter_andar_destino) {
+                    case 'a': new_request_cabine = 100 + 0; break;
+                    case 'b': new_request_cabine = 100 + 1; break;
+                    case 'c': new_request_cabine = 100 + 2; break;
+                    case 'd': new_request_cabine = 100 + 3; break;
+                    case 'e': new_request_cabine = 100 + 4; break;
+                    case 'f': new_request_cabine = 100 + 5; break;
+                    case 'g': new_request_cabine = 100 + 6; break;
+                    case 'h': new_request_cabine = 100 + 7; break;
+                    case 'i': new_request_cabine = 100 + 8; break;
+                    case 'j': new_request_cabine = 100 + 9; break;
+                    case 'k': new_request_cabine = 100 + 10; break;
+                    case 'l': new_request_cabine = 100 + 11; break;
+                    case 'm': new_request_cabine = 100 + 12; break;
+                    case 'n': new_request_cabine = 100 + 13; break;
+                    case 'o': new_request_cabine = 100 + 14; break;
+                    case 'p': new_request_cabine = 100 + 15; break;
                 }
-        }
-        //atendimentos solicitados fora do elevador
-        if (strncmp(rx_processor, "eE", 2) == 0) {
-            char command_temp[30];
-            char caracter_andar_destino [3] = "ff";
-            char destino_char[2]; //armazena caractere recebido 
-            caracter_andar_destino[0] = rx_processor[2];
-            caracter_andar_destino[1] = rx_processor[3];
-            caracter_andar_destino[2] = '\0'; //adiciona terminador nulo
-            //processa e manda para fila de atendimentos
-            int new_request_corredor = -1;
-            if (strcmp(caracter_andar_destino, "00") == 0) new_request_corredor = 0;
-            else if (strcmp(caracter_andar_destino, "01") == 0) new_request_corredor = 1;
-            else if (strcmp(caracter_andar_destino, "02") == 0) new_request_corredor = 2;
-            else if (strcmp(caracter_andar_destino, "03") == 0) new_request_corredor = 3;
-            else if (strcmp(caracter_andar_destino, "04") == 0) new_request_corredor = 4;
-            else if (strcmp(caracter_andar_destino, "05") == 0) new_request_corredor = 5;
-            else if (strcmp(caracter_andar_destino, "06") == 0) new_request_corredor = 6;
-            else if (strcmp(caracter_andar_destino, "07") == 0) new_request_corredor = 7;
-            else if (strcmp(caracter_andar_destino, "08") == 0) new_request_corredor = 8;
-            else if (strcmp(caracter_andar_destino, "09") == 0) new_request_corredor = 9;
-            else if (strcmp(caracter_andar_destino, "10") == 0) new_request_corredor = 10;
-            else if (strcmp(caracter_andar_destino, "11") == 0) new_request_corredor = 11;
-            else if (strcmp(caracter_andar_destino, "12") == 0) new_request_corredor = 12;
-            else if (strcmp(caracter_andar_destino, "13") == 0) new_request_corredor = 13;
-            else if (strcmp(caracter_andar_destino, "14") == 0) new_request_corredor = 14;
-            else if (strcmp(caracter_andar_destino, "15") == 0) new_request_corredor = 15;
-            
-            if(new_request_corredor!= -1){
-                vTaskDelay(pdMS_TO_TICKS(100));
-                xQueueSend(queue_atendimentos, &new_request_corredor, portMAX_DELAY);
+                if (new_request_cabine != -1) {
+                    // liga led botão elevador
+                    tx[0] = 'e'; tx[1] = 'L'; tx[2] = caracter_andar_destino; tx[3] = '\r';
+                    xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
+                    zerar_tx();
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    xQueueSend(queue_atendimentos_cabine, &new_request_cabine, portMAX_DELAY);
+                }
             }
+            // atendimentos solicitados fora do elevador
+            if (strncmp(rx_processor, "eE", 2) == 0) {
+                char command_temp[30];
+                char caracter_andar_destino[3] = "ff";
+                char destino_char[2]; // armazena caractere recebido 
+                caracter_andar_destino[0] = rx_processor[2];
+                caracter_andar_destino[1] = rx_processor[3];
+                caracter_andar_destino[2] = '\0'; // adiciona terminador nulo
+                // processa e manda para fila de atendimentos
+                int new_request_corredor = -1;
+                if (strcmp(caracter_andar_destino, "00") == 0) new_request_corredor = 0;
+                else if (strcmp(caracter_andar_destino, "01") == 0) new_request_corredor = 1;
+                else if (strcmp(caracter_andar_destino, "02") == 0) new_request_corredor = 2;
+                else if (strcmp(caracter_andar_destino, "03") == 0) new_request_corredor = 3;
+                else if (strcmp(caracter_andar_destino, "04") == 0) new_request_corredor = 4;
+                else if (strcmp(caracter_andar_destino, "05") == 0) new_request_corredor = 5;
+                else if (strcmp(caracter_andar_destino, "06") == 0) new_request_corredor = 6;
+                else if (strcmp(caracter_andar_destino, "07") == 0) new_request_corredor = 7;
+                else if (strcmp(caracter_andar_destino, "08") == 0) new_request_corredor = 8;
+                else if (strcmp(caracter_andar_destino, "09") == 0) new_request_corredor = 9;
+                else if (strcmp(caracter_andar_destino, "10") == 0) new_request_corredor = 10;
+                else if (strcmp(caracter_andar_destino, "11") == 0) new_request_corredor = 11;
+                else if (strcmp(caracter_andar_destino, "12") == 0) new_request_corredor = 12;
+                else if (strcmp(caracter_andar_destino, "13") == 0) new_request_corredor = 13;
+                else if (strcmp(caracter_andar_destino, "14") == 0) new_request_corredor = 14;
+                else if (strcmp(caracter_andar_destino, "15") == 0) new_request_corredor = 15;
+
+                if (new_request_corredor != -1) {
+                    vTaskDelay(pdMS_TO_TICKS(100));
+                    xQueueSend(queue_atendimentos_corredor, &new_request_corredor, portMAX_DELAY);
+                }
+            }
+            merge_queues();
+            memset(rx_processor, 0, sizeof(rx_processor));
         }
-        memset(rx_processor, 0, sizeof(rx_processor));            
-        }
-         zerar_tx();
+        zerar_tx();
     }
 }
 
@@ -346,7 +340,7 @@ void atendimentos_task(void *pvParameters) {
             zerar_tx();
             step_floor = atendimento_task - esquerdo.floor;
         }            
-        vTaskDelay(pdMS_TO_TICKS(250));     //alterar!! -> PC da poli 250 | PC daiara 500
+        vTaskDelay(pdMS_TO_TICKS(100));     //alterar!! -> PC da poli 250 | PC daiara 500
         tx[0]='e';tx[1]='p';tx[2]='\r';
         esquerdo.estado = 'P';
         xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
@@ -418,18 +412,6 @@ void atendimentos_task(void *pvParameters) {
         esquerdo.estado = 'F';
         xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
         zerar_tx(); 
-        }
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-
-void led_blink_task(void *pvParameters) {
-    unsigned long timerled = esp_timer_get_time() / 1000;
-    while (1) {
-        unsigned long current_time = esp_timer_get_time() / 1000;
-        if ((current_time - timerled) >= 200) {
-            gpio_set_level(LED_BUILTIN, !gpio_get_level(LED_BUILTIN));
-            timerled = current_time;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }

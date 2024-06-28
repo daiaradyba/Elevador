@@ -6,4 +6,5 @@ cmake_minimum_required(VERSION 3.5)
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(template-app)
-add_compile_options(-Wno-unused-variable)
+add_compile_options(-Wunused-variable)
+ 

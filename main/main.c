@@ -310,6 +310,8 @@ void command_processor_task(void *pvParameters) {
 //Atendimentos == andares.
 void atendimentos_task(void *pvParameters) {
     int atendimento_task;
+    int vetor_atendimento[50];
+    int num_atendimentos = 0;
     int step_floor = 0;
     char atendimento_task_convertido[20];
     char esquerdo_floor_convertido[20];
@@ -317,7 +319,10 @@ void atendimentos_task(void *pvParameters) {
     char caracter_destino = 'z';
     char flag_cabine_corredor = 'z'; 
     while (1) {
-       if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
+       if (xQueueReceive(queue_atendimentos, &vetor_atendimento[num_atendimentos], portMAX_DELAY)) {
+        num_atendimentos++;
+        for (int i = 0; i < num_atendimentos; i++) {
+        atendimento_task = vetor_atendimento[i];
         //atendimento>100 = atendimento cabine
         if(atendimento_task>=100){
             flag_cabine_corredor = 'd';
@@ -412,9 +417,12 @@ void atendimentos_task(void *pvParameters) {
         esquerdo.estado = 'F';
         xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
         zerar_tx(); 
+        for (int j = i; j < num_atendimentos - 1; j++) vetor_atendimento[j] = vetor_atendimento[j + 1];
+        num_atendimentos--;
+        i--; 
         }
         vTaskDelay(pdMS_TO_TICKS(10));
-    }
+    }}
 }
 
 /*COISAS DE FIREBASE E WIFI*/

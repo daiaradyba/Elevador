@@ -2,6 +2,10 @@
 
 pipipipopopo este projeto tem por objetivo realizar o controle de um elevador...<br>
 
+# _Autores_
+Daiara...
+Polianna...
+
 ## Requisitos de projeto
 
 Realização do controle do Elevador Esquerdo<br>
@@ -33,10 +37,15 @@ idf.py -p port flash
 | F      | FF      | Fechado      |
 | S      | FF      | Sobe     |
 | D      | FF      | Desce      |
+| d      | FF      | dentro      |
+| f      | FF      | fora      |
+| \r      | 0A      | -      |
+| \n      | 0D      | -      |
 
 ## ANOTAÇÕES
 
-- colocar alterações feitas
+- utilizar apenas _Building View_ pois alterar para _Technical View_ altera a velocidade
+- alterar a contagem na linha XX do código para a parada (varia entre PCs)
 
 ## Estrutura do projeto
 Below is short explanation of remaining files in the project folder.

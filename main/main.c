@@ -33,7 +33,8 @@ QueueHandle_t queue_atendimentos_corredor;
 struct elevador {
     char andar;
     char estado;
-    int floor; 
+    int floor;
+    int direction; //1 sobe -1 desce 
     char prox;
     char btc_up[15];
     char btc_down[15];
@@ -65,10 +66,6 @@ void uart_rx_task(void *pvParameters);
 void command_processor_task(void *pvParameters);
 void uart_tx_task(void *pvParameters);
 void atendimentos_task(void *pvParameters);
-esp_err_t _http_event_handler(esp_http_client_event_t *evt);
-void post_finished_to_firebase(const char* message, const char* campo);
-void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data);
-void wifi_init();
 
 void app_main() {
     esp_log_level_set("*", ESP_LOG_NONE);
@@ -95,6 +92,7 @@ void setup() {
     esquerdo.andar = 0;
     esquerdo.estado = 'P';
     esquerdo.floor = 0;
+    esquerdo.direction = 0;
     esquerdo.prox = 0;
     esquerdo.n_btc_in = 0;
     esquerdo.n_seq_up = 0;
@@ -105,7 +103,6 @@ void setup() {
     memset(esquerdo.seq_up, 0, sizeof(esquerdo.seq_up));
     memset(esquerdo.seq_down, 0, sizeof(esquerdo.seq_down));
     init_uart();
-    wifi_init();
     gpio_set_direction(LED_BUILTIN, GPIO_MODE_OUTPUT);
     timerled = esp_timer_get_time() / 1000;
     timerelevador = esp_timer_get_time() / 1000;
@@ -167,27 +164,18 @@ void uart_tx_task(void *pvParameters) {
     }
 }
 
-void merge_queues() {
-    int request_cabine, request_corredor;
-    int merged_requests[16] = {0};  
-    //processa atendimento cabine
-    while (xQueueReceive(queue_atendimentos_cabine, &request_cabine, 0)) {
-        int floor = request_cabine - 100;
-        merged_requests[floor] = request_cabine;
+void merge_queues(void) {
+    int item;  
+    while (xQueueReceive(queue_atendimentos_corredor, &item, 0) == pdTRUE) {
+        int merged_item = item; // 0XX
+        xQueueSend(queue_atendimentos, &merged_item, portMAX_DELAY);
     }
-    //processa atendimento corredor
-    while (xQueueReceive(queue_atendimentos_corredor, &request_corredor, 0)) {
-        if (merged_requests[request_corredor] == 0) {
-            merged_requests[request_corredor] = request_corredor;
-        }
+    vTaskDelay(pdMS_TO_TICKS(10));
+    while (xQueueReceive(queue_atendimentos_cabine, &item, 0) == pdTRUE) {
+        int merged_item = 100 + item; // 1XX
+        xQueueSend(queue_atendimentos, &merged_item, portMAX_DELAY);
     }
-    // Envia os atendimentos mesclados para a fila principal
-    for (int i = 0; i < 16; i++) {
-        if (merged_requests[i] != 0) {
-            xQueueSend(queue_atendimentos, &merged_requests[i], portMAX_DELAY);
-            vTaskDelay(pdMS_TO_TICKS(10));
-        }
-    }
+    vTaskDelay(pdMS_TO_TICKS(10));
 }
 
 void command_processor_task(void *pvParameters) {
@@ -203,6 +191,7 @@ void command_processor_task(void *pvParameters) {
                 esquerdo.andar = 0;
                 esquerdo.estado = 'P';
                 esquerdo.floor = 0;
+                esquerdo.direction = 1;
                 esquerdo.prox = 0;
                 esquerdo.n_btc_in = 0;
                 esquerdo.n_seq_up = 0;
@@ -242,22 +231,22 @@ void command_processor_task(void *pvParameters) {
                 // processa e manda para fila de atendimentos
                 int new_request_cabine = -1;
                 switch (caracter_andar_destino) {
-                    case 'a': new_request_cabine = 100 + 0; break;
-                    case 'b': new_request_cabine = 100 + 1; break;
-                    case 'c': new_request_cabine = 100 + 2; break;
-                    case 'd': new_request_cabine = 100 + 3; break;
-                    case 'e': new_request_cabine = 100 + 4; break;
-                    case 'f': new_request_cabine = 100 + 5; break;
-                    case 'g': new_request_cabine = 100 + 6; break;
-                    case 'h': new_request_cabine = 100 + 7; break;
-                    case 'i': new_request_cabine = 100 + 8; break;
-                    case 'j': new_request_cabine = 100 + 9; break;
-                    case 'k': new_request_cabine = 100 + 10; break;
-                    case 'l': new_request_cabine = 100 + 11; break;
-                    case 'm': new_request_cabine = 100 + 12; break;
-                    case 'n': new_request_cabine = 100 + 13; break;
-                    case 'o': new_request_cabine = 100 + 14; break;
-                    case 'p': new_request_cabine = 100 + 15; break;
+                    case 'a': new_request_cabine = 0; break;
+                    case 'b': new_request_cabine = 1; break;
+                    case 'c': new_request_cabine = 2; break;
+                    case 'd': new_request_cabine = 3; break;
+                    case 'e': new_request_cabine = 4; break;
+                    case 'f': new_request_cabine = 5; break;
+                    case 'g': new_request_cabine = 6; break;
+                    case 'h': new_request_cabine = 7; break;
+                    case 'i': new_request_cabine = 8; break;
+                    case 'j': new_request_cabine = 9; break;
+                    case 'k': new_request_cabine = 10; break;
+                    case 'l': new_request_cabine = 11; break;
+                    case 'm': new_request_cabine = 12; break;
+                    case 'n': new_request_cabine = 13; break;
+                    case 'o': new_request_cabine = 14; break;
+                    case 'p': new_request_cabine = 15; break;
                 }
                 if (new_request_cabine != -1) {
                     // liga led botão elevador
@@ -310,8 +299,6 @@ void command_processor_task(void *pvParameters) {
 //Atendimentos == andares.
 void atendimentos_task(void *pvParameters) {
     int atendimento_task;
-    int vetor_atendimento[50];
-    int num_atendimentos = 0;
     int step_floor = 0;
     char atendimento_task_convertido[20];
     char esquerdo_floor_convertido[20];
@@ -319,10 +306,7 @@ void atendimentos_task(void *pvParameters) {
     char caracter_destino = 'z';
     char flag_cabine_corredor = 'z'; 
     while (1) {
-       if (xQueueReceive(queue_atendimentos, &vetor_atendimento[num_atendimentos], portMAX_DELAY)) {
-        num_atendimentos++;
-        for (int i = 0; i < num_atendimentos; i++) {
-        atendimento_task = vetor_atendimento[i];
+       if (xQueueReceive(queue_atendimentos, &atendimento_task, portMAX_DELAY)) {
         //atendimento>100 = atendimento cabine
         if(atendimento_task>=100){
             flag_cabine_corredor = 'd';
@@ -339,8 +323,15 @@ void atendimentos_task(void *pvParameters) {
         step_floor = atendimento_task  - esquerdo.floor;     //passo andar desejado - andar atual
         while(step_floor != 0){                              //enquanto a diferença for diferente de 0 (andar desejado != andar atual)        
             vTaskDelay(pdMS_TO_TICKS(100));                  //atender outras tasks
-            if(step_floor < 0){ tx[0]='e';tx[1]='d';tx[2]='\r'; } //caso andar menor desce
-            if(step_floor > 0){ tx[0]='e';tx[1]='s';tx[2]='\r'; }//caso seja maior que zero (andar maior) sobe
+            if(step_floor < 0){
+                tx[0]='e';tx[1]='d';tx[2]='\r'; 
+                esquerdo.direction = -1;    
+            } //caso andar menor desce
+            if(step_floor > 0){ 
+                tx[0]='e';tx[1]='s';tx[2]='\r'; 
+                esquerdo.direction = 1;
+            }//caso seja maior que zero (andar maior) sobe
+
             xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
             zerar_tx();
             step_floor = atendimento_task - esquerdo.floor;
@@ -355,6 +346,7 @@ void atendimentos_task(void *pvParameters) {
         esquerdo.estado = 'A';
         xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
         zerar_tx(); 
+        
         switch(atendimento_task){
             case 0:
                 caracter_destino = 'a';
@@ -405,7 +397,6 @@ void atendimentos_task(void *pvParameters) {
                 caracter_destino = 'p';
             break;
         }
-        
         vTaskDelay(pdMS_TO_TICKS(100));
         if(flag_cabine_corredor == 'd'){                    //se for de dentro da cabine, desliga led
             tx[0]='e';tx[1]='D';tx[2]=caracter_destino;tx[3]='\r';
@@ -417,144 +408,7 @@ void atendimentos_task(void *pvParameters) {
         esquerdo.estado = 'F';
         xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);
         zerar_tx(); 
-        for (int j = i; j < num_atendimentos - 1; j++) vetor_atendimento[j] = vetor_atendimento[j + 1];
-        num_atendimentos--;
-        i--; 
         }
         vTaskDelay(pdMS_TO_TICKS(10));
-    }}
-}
-
-/*COISAS DE FIREBASE E WIFI*/
-//manipulador de eventos
-esp_err_t _http_event_handler(esp_http_client_event_t *evt) {
-    static char *output_buffer;  
-    static int output_len;       
-    switch(evt->event_id) {
-        case HTTP_EVENT_ERROR:
-            ESP_LOGI("TAG", "HTTP_EVENT_ERROR");
-            break;
-        case HTTP_EVENT_ON_CONNECTED:
-            ESP_LOGI("TAG", "HTTP_EVENT_ON_CONNECTED");
-            break;
-        case HTTP_EVENT_HEADER_SENT:
-            ESP_LOGI("TAG", "HTTP_EVENT_HEADER_SENT");
-            break;
-        case HTTP_EVENT_ON_HEADER:
-            ESP_LOGI("TAG", "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-            break;
-        case HTTP_EVENT_ON_DATA:
-            if (!esp_http_client_is_chunked_response(evt->client)) {
-                if (evt->user_data) memcpy(evt->user_data + output_len, evt->data, evt->data_len);
-                else {
-                    if (output_buffer == NULL) {
-                        output_buffer = (char *) malloc(esp_http_client_get_content_length(evt->client));
-                        output_len = 0;
-                        if (output_buffer == NULL) {
-                            ESP_LOGE("TAG", "Failed to allocate memory for output buffer");
-                            return ESP_FAIL;
-                        }
-                    }
-                    memcpy(output_buffer + output_len, evt->data, evt->data_len);
-                }
-                output_len += evt->data_len;
-            }
-            break;
-        case HTTP_EVENT_ON_FINISH:
-            ESP_LOGI("TAG", "HTTP_EVENT_ON_FINISH");
-            if (output_buffer != NULL) {
-                free(output_buffer);
-                output_buffer = NULL;
-            }
-            output_len = 0;
-            break;
-        case HTTP_EVENT_REDIRECT:
-            ESP_LOGI("TAG", "HTTP_EVENT_REDIRECT");
-            break;
-        case HTTP_EVENT_DISCONNECTED:
-            ESP_LOGI("TAG", "HTTP_EVENT_DISCONNECTED");
-            if (output_buffer != NULL) {
-                free(output_buffer);
-                output_buffer = NULL;
-                output_len = 0;
-            }
-            break;
     }
-    return ESP_OK;
-}
-//solicitacao de post
-void post_finished_to_firebase(const char* message, const char* campo) {
-    const char* url = "https://elevador-c3c39-default-rtdb.firebaseio.com/.json";
-    char post_data[256];
-    snprintf(post_data, sizeof(post_data), "{\"%s\": \"%s\"}", campo, message);
-    esp_http_client_config_t config = {
-        .url = url,
-        .method = HTTP_METHOD_PATCH,
-    };
-    esp_http_client_handle_t client = esp_http_client_init(&config);
-    if (client == NULL) {
-        ESP_LOGE("TAG", "Failed to initialize HTTP client");
-        return;
-    }
-    esp_http_client_set_post_field(client, post_data, strlen(post_data));
-    esp_err_t err = esp_http_client_perform(client);
-    if (err == ESP_OK) {
-        int status_code = esp_http_client_get_status_code(client);
-        if (status_code == 200) {
-            ESP_LOGI("TAG", "Successfully posted status to Firebase.");
-        } else {
-            ESP_LOGE("TAG", "HTTP POST failed with status code: %d", status_code);
-        }
-    } else {
-        ESP_LOGE("TAG", "HTTP POST request failed: %s", esp_err_to_name(err));
-    }
-    esp_http_client_cleanup(client);
-}
-//handler para eventos do wifi
-void event_handler(void* arg, esp_event_base_t event_base, int32_t event_id, void* event_data) {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
-        esp_wifi_connect();
-    } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        esp_wifi_connect();
-        ESP_LOGI("TAG", "Tentando reconectar ao AP...");
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ESP_LOGI("TAG", "Conectado com sucesso!");
-    }
-}
-//configuracao e inicializacao do wifi
-void wifi_init() {
-    nvs_flash_init();
-    esp_netif_init();
-    esp_event_loop_create_default();
-    esp_netif_create_default_wifi_sta();
-
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&cfg);
-
-    esp_event_handler_instance_t instance_any_id;
-    esp_event_handler_instance_t instance_got_ip;
-    esp_event_handler_instance_register(WIFI_EVENT,
-                                        ESP_EVENT_ANY_ID,
-                                        &event_handler,
-                                        NULL,
-                                        &instance_any_id);
-    esp_event_handler_instance_register(IP_EVENT,
-                                        IP_EVENT_STA_GOT_IP,
-                                        &event_handler,
-                                        NULL,
-                                        &instance_got_ip);
-    wifi_config_t wifi_config = {
-        .sta = {
-            .ssid = WIFI_SSID,
-            .password = WIFI_PASS,
-            .threshold.authmode = WIFI_AUTH_WPA2_PSK,
-            .pmf_cfg = {
-                .capable = true,
-                .required = false
-            },
-        },
-    };
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config);
-    esp_wifi_start();
 }

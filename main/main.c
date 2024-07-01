@@ -424,7 +424,7 @@ void atendimentos_task(void *pvParameters) {
                 step_floor = atendimento_task - esquerdo.floor;
             }            
 
-           vTaskDelay(pdMS_TO_TICKS(500));
+           vTaskDelay(pdMS_TO_TICKS(500)); //PC Poli = 100 e PC Daiara = 500
             tx[0]='e';tx[1]='p';tx[2]='\r';
             esquerdo.estado = 'P';
             xQueueSend(uart_queue_tx, &tx, portMAX_DELAY);

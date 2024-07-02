@@ -1,6 +1,6 @@
 # _Projeto de Sistemas Embarcados - ELF74 - Controle Elevador_
-Daiara Dyba, 1508965
-Polianna Beatriz Basso, 2302578
+ <b>Daiara Dyba, 1508965</b><br>
+ <b>Polianna Beatriz Basso, 2302578</b><br>
 
 ## Requisitos de projeto
 
